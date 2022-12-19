@@ -26,6 +26,12 @@ struct BBox {
         return *this;
     }
 
+    BVH_ALWAYS_INLINE BBox& constrain(const BBox& other) {
+        min = robust_max(min, other.min);
+        max = robust_min(max, other.max);
+        return *this;
+    }
+
     BVH_ALWAYS_INLINE Vec<T, N> get_diagonal() const { return max - min; }
     BVH_ALWAYS_INLINE Vec<T, N> get_center() const { return (max + min) * static_cast<T>(0.5); }
 

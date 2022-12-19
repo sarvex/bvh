@@ -21,8 +21,9 @@ struct Tri {
         : p0(p0), p1(p1), p2(p2)
     {}
 
-    BVH_ALWAYS_INLINE BBox<T, 3> get_bbox() const { return BBox(p0).extend(p1).extend(p2); }
-    BVH_ALWAYS_INLINE Vec<T, 3> get_center() const { return (p0 + p1 + p2) * static_cast<T>(1. / 3.); }
+    BVH_ALWAYS_INLINE BBox<T, N> get_bbox() const { return BBox(p0).extend(p1).extend(p2); }
+    BVH_ALWAYS_INLINE Vec<T, N> get_center() const { return (p0 + p1 + p2) * static_cast<T>(1. / 3.); }
+	BVH_ALWAYS_INLINE std::pair<BBox<T, N>, BBox<T, N>> split(size_t axis, T pos) const;
 };
 
 /// A 3d triangle, represented as two edges and a point, with an (unnormalized, left-handed) normal.
@@ -74,6 +75,42 @@ std::optional<std::pair<T, T>> PrecomputedTri<T>::intersect(Ray<T, 3>& ray, T to
     }
 
     return std::nullopt;
+}
+
+template <typename T, size_t N>
+std::pair<BBox<T, N>, BBox<T, N>> Tri<T, N>::split(size_t axis, T pos) const {
+	auto split_edge = [=] (const Vec<T, N>& a, const Vec<T, N>& b) {
+		auto t = (pos - a[axis]) / (b[axis] - a[axis]);
+		return a + t * (b - a);
+	};
+
+	auto left  = BBox<T, N>::make_empty();
+	auto right = BBox<T, N>::make_empty();
+	auto q0 = p0[axis] <= pos;
+	auto q1 = p1[axis] <= pos;
+	auto q2 = p2[axis] <= pos;
+	if (q0) left .extend(p0);
+	else    right.extend(p0);
+	if (q1) left .extend(p1);
+	else    right.extend(p1);
+	if (q2) left .extend(p2);
+	else    right.extend(p2);
+	if (q0 ^ q1) {
+		auto m = split_edge(p0, p1);
+		left.extend(m);
+		right.extend(m);
+	}
+	if (q1 ^ q2) {
+		auto m = split_edge(p1, p2);
+		left.extend(m);
+		right.extend(m);
+	}
+	if (q2 ^ q0) {
+		auto m = split_edge(p2, p0);
+		left.extend(m);
+		right.extend(m);
+	}
+	return std::make_pair(left, right);
 }
 
 } // namespace bvh::v2
