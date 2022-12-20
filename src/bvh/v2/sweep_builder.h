@@ -35,8 +35,7 @@ public:
         std::span<const Vec> centers,
         const Config& config = {})
     {
-        SweepBuilder builder(bboxes, centers, config);
-        return builder.build();
+        return SweepBuilder(bboxes, centers, config).build();
     }
 
 protected:
