@@ -122,8 +122,8 @@ protected:
     }
 
     size_t fallback_split(const BBox& bbox, size_t begin, size_t end) {
-        // This function is performs a split in the median on the largest axis, in case the
-        // binning procedure could not find a good split and the number of primitives would be too
+        // This function splits primitives along the median on the largest axis, in the case where
+        // the binning procedure could not find a good split and the number of primitives is too
         // large to fit in a leaf.
         const size_t axis = bbox.get_diagonal().get_largest_axis();
         const size_t mid  = (begin + end + 1) / 2;
