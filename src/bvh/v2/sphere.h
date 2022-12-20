@@ -30,17 +30,17 @@ struct Sphere  {
     /// setting `AssumeNormalized` to true.
     template <bool AssumeNormalized = false>
     BVH_ALWAYS_INLINE std::optional<std::pair<T, T>> intersect(const Ray<T, N>& ray) const {
-        auto oc = ray.org - center;
-        auto a = AssumeNormalized ? static_cast<T>(1.) : dot(ray.dir, ray.dir);
-        auto b = static_cast<T>(2.) * dot(ray.dir, oc);
-        auto c = dot(oc, oc) - radius * radius;
+        const auto oc = ray.org - center;
+        const auto a = AssumeNormalized ? static_cast<T>(1.) : dot(ray.dir, ray.dir);
+        const auto b = static_cast<T>(2.) * dot(ray.dir, oc);
+        const auto c = dot(oc, oc) - radius * radius;
 
-        auto delta = b * b - static_cast<T>(4.) * a * c;
+        const auto delta = b * b - static_cast<T>(4.) * a * c;
         if (delta >= 0) {
-            auto inv = -static_cast<T>(0.5) / a;
-            auto sqrt_delta = std::sqrt(delta);
-            auto t0 = robust_max((b + sqrt_delta) * inv, ray.tmin);
-            auto t1 = robust_min((b - sqrt_delta) * inv, ray.tmax);
+            const auto inv = -static_cast<T>(0.5) / a;
+            const auto sqrt_delta = std::sqrt(delta);
+            const auto t0 = robust_max((b + sqrt_delta) * inv, ray.tmin);
+            const auto t1 = robust_min((b - sqrt_delta) * inv, ray.tmax);
             if (t0 <= t1)
                 return std::make_optional(std::make_pair(t0, t1));
         }

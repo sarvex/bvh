@@ -56,18 +56,18 @@ struct PrecomputedTri {
 
 template <typename T>
 std::optional<std::pair<T, T>> PrecomputedTri<T>::intersect(Ray<T, 3>& ray, T tolerance) const {
-    auto c = p0 - ray.org;
-    auto r = cross(ray.dir, c);
-    auto inv_det = static_cast<T>(1.) / dot(n, ray.dir);
+    const auto c = p0 - ray.org;
+    const auto r = cross(ray.dir, c);
+    const auto inv_det = static_cast<T>(1.) / dot(n, ray.dir);
 
-    auto u = dot(r, e2) * inv_det;
-    auto v = dot(r, e1) * inv_det;
-    auto w = static_cast<T>(1.) - u - v;
+    const auto u = dot(r, e2) * inv_det;
+    const auto v = dot(r, e1) * inv_det;
+    const auto w = static_cast<T>(1.) - u - v;
 
     // These comparisons are designed to return false
     // when one of t, u, or v is a NaN
     if (u >= tolerance && v >= tolerance && w >= tolerance) {
-        auto t = dot(n, c) * inv_det;
+        const auto t = dot(n, c) * inv_det;
         if (t >= ray.tmin && t <= ray.tmax) {
             ray.tmax = t;
             return std::make_optional(std::pair<T, T> { u, v });
@@ -86,9 +86,9 @@ std::pair<BBox<T, N>, BBox<T, N>> Tri<T, N>::split(size_t axis, T pos) const {
 
 	auto left  = BBox<T, N>::make_empty();
 	auto right = BBox<T, N>::make_empty();
-	auto q0 = p0[axis] <= pos;
-	auto q1 = p1[axis] <= pos;
-	auto q2 = p2[axis] <= pos;
+	const bool q0 = p0[axis] <= pos;
+	const bool q1 = p1[axis] <= pos;
+	const bool q2 = p2[axis] <= pos;
 	if (q0) left .extend(p0);
 	else    right.extend(p0);
 	if (q1) left .extend(p1);

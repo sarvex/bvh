@@ -52,7 +52,8 @@ struct ParallelExecutor : Executor<ParallelExecutor> {
         if (end - begin < parallel_threshold)
             return loop(begin, end);
 
-        auto chunk_size = std::max(size_t{1}, (end - begin) / thread_pool.get_thread_count());
+        const size_t thread_count = thread_pool.get_thread_count();
+        const size_t chunk_size = (end - begin + thread_count - 1) / thread_count;
         for (size_t i = begin; i < end; i += chunk_size) {
             size_t next = std::min(end, i + chunk_size);
             thread_pool.push([=] (size_t) { loop(i, next); });
@@ -68,17 +69,18 @@ struct ParallelExecutor : Executor<ParallelExecutor> {
             return result;
         }
 
-        auto chunk_size = std::max(size_t{1}, (end - begin) / thread_pool.get_thread_count());
-        std::vector<T> per_thread_result(thread_pool.get_thread_count(), init);
-        for (size_t i = begin; i < end; i += chunk_size) {
+        const size_t thread_count = thread_pool.get_thread_count();
+        const size_t chunk_size = (end - begin + thread_count - 1) / thread_count;
+        std::vector<T> per_thread_result(thread_count, init);
+        for (size_t i = begin, j = 0; i < end; i += chunk_size, j++) {
             size_t next = std::min(end, i + chunk_size);
-            thread_pool.push([&, i, next] (size_t thread_id) {
-                auto& result = per_thread_result[thread_id];
+            thread_pool.push([&, i, j, next] (size_t) {
+                auto& result = per_thread_result[j];
                 reduce(result, i, next);
             });
         }
         thread_pool.wait();
-        for (size_t i = 1; i < thread_pool.get_thread_count(); ++i)
+        for (size_t i = 1; i < thread_count; ++i)
             join(per_thread_result[0], std::move(per_thread_result[i]));
         return per_thread_result[0];
     }

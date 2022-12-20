@@ -1,7 +1,8 @@
-#ifndef BVH_V2_SWEEP_SAH_BUILDER_H
-#define BVH_V2_SWEEP_SAH_BUILDER_H
+#ifndef BVH_V2_SWEEP_BUILDER_H
+#define BVH_V2_SWEEP_BUILDER_H
 
-#include "bvh/v2/top_down_sah_builder.h"
+#include "bvh/v2/area_heuristic.h"
+#include "bvh/v2/top_down_builder.h"
 
 #include <stack>
 #include <tuple>
@@ -12,27 +13,29 @@
 
 namespace bvh::v2 {
 
-/// Single-threaded top-down builder that partitions primitives based on the Surface
-/// Area Heuristic (SAH). Primitives are only sorted once along each axis.
-template <typename Node>
-class SweepSahBuilder : public TopDownSahBuilder<Node> {
-    using typename TopDownSahBuilder<Node>::Scalar;
-    using typename TopDownSahBuilder<Node>::Vec;
-    using typename TopDownSahBuilder<Node>::BBox;
+/// Single-threaded top-down builder that partitions primitives based on the given split heuristic.
+/// Primitives are only sorted once along each axis.
+template <
+    typename Node,
+    typename SplitHeuristic = AreaHeuristic<typename Node::Scalar>>
+class SweepBuilder : public TopDownBuilder<Node, SplitHeuristic> {
+    using typename TopDownBuilder<Node, SplitHeuristic>::Scalar;
+    using typename TopDownBuilder<Node, SplitHeuristic>::Vec;
+    using typename TopDownBuilder<Node, SplitHeuristic>::BBox;
 
-    using TopDownSahBuilder<Node>::build;
-    using TopDownSahBuilder<Node>::config_;
-    using TopDownSahBuilder<Node>::bboxes_;
+    using TopDownBuilder<Node, SplitHeuristic>::build;
+    using TopDownBuilder<Node, SplitHeuristic>::config_;
+    using TopDownBuilder<Node, SplitHeuristic>::bboxes_;
 
 public:
-    using typename TopDownSahBuilder<Node>::Config;
+    using typename TopDownBuilder<Node, SplitHeuristic>::Config;
 
     BVH_ALWAYS_INLINE static Bvh<Node> build(
         std::span<const BBox> bboxes,
         std::span<const Vec> centers,
         const Config& config = {})
     {
-        SweepSahBuilder builder(bboxes, centers, config);
+        SweepBuilder builder(bboxes, centers, config);
         return builder.build();
     }
 
@@ -47,11 +50,11 @@ protected:
     std::vector<Scalar> accum_;
     std::vector<size_t> prim_ids_[Node::dimension];
 
-    BVH_ALWAYS_INLINE SweepSahBuilder(
+    BVH_ALWAYS_INLINE SweepBuilder(
         std::span<const BBox> bboxes,
         std::span<const Vec> centers,
         const Config& config)
-        : TopDownSahBuilder<Node>(bboxes, centers, config)
+        : TopDownBuilder<Node, SplitHeuristic>(bboxes, centers, config)
     {
         marks_.resize(bboxes.size());
         accum_.resize(bboxes.size());
@@ -77,7 +80,7 @@ protected:
             auto right_cost = static_cast<Scalar>(0.);
             for (; i > next; --i) {
                 right_bbox.extend(bboxes_[prim_ids_[axis][i]]);
-                accum_[i] = right_cost = config_.sah.get_leaf_cost(i, end, right_bbox);
+                accum_[i] = right_cost = config_.split_heuristic.get_child_cost(end - i, right_bbox);
             }
             // Every `chunk_size` elements, check that we are not above the maximum cost
             if (right_cost > best_split.cost) {
@@ -92,8 +95,8 @@ protected:
             left_bbox.extend(bboxes_[prim_ids_[axis][i]]);
         for (size_t i = first_right; i < end - 1; ++i) {
             left_bbox.extend(bboxes_[prim_ids_[axis][i]]);
-            auto left_cost = config_.sah.get_leaf_cost(begin, i + 1, left_bbox);
-            auto cost = left_cost + accum_[i + 1];
+            auto left_cost = config_.split_heuristic.get_child_cost(i + 1 - begin, left_bbox);
+            auto cost = config_.split_heuristic.get_split_cost(left_cost, accum_[i + 1]);
             if (cost < best_split.cost)
                 best_split = Split { i + 1, cost, axis };
             else if (left_cost > best_split.cost)
@@ -108,13 +111,12 @@ protected:
 
     std::optional<size_t> try_split(const BBox& bbox, size_t begin, size_t end) override {
         // Find the best split over all axes
-        auto leaf_cost = config_.sah.get_non_split_cost(begin, end, bbox);
-        auto best_split = Split { (begin + end + 1) / 2, leaf_cost, 0 };
+        auto best_split = Split { (begin + end + 1) / 2, std::numeric_limits<Scalar>::max(), 0 };
         for (size_t axis = 0; axis < Node::dimension; ++axis)
             find_best_split(axis, begin, end, best_split);
 
         // Make sure that the split is good before proceeding with it
-        if (best_split.cost >= leaf_cost) {
+        if (!config_.split_heuristic.should_split(best_split.cost, end - begin, bbox)) {
             if (end - begin <= config_.max_leaf_size)
                 return std::nullopt;
 

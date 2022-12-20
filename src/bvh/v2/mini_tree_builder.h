@@ -1,8 +1,8 @@
 #ifndef BVH_V2_MINI_TREE_BUILDER_H
 #define BVH_V2_MINI_TREE_BUILDER_H
 
-#include "bvh/v2/sweep_sah_builder.h"
-#include "bvh/v2/binned_sah_builder.h"
+#include "bvh/v2/sweep_builder.h"
+#include "bvh/v2/binned_builder.h"
 #include "bvh/v2/thread_pool.h"
 #include "bvh/v2/executor.h"
 
@@ -20,14 +20,17 @@ namespace bvh::v2 {
 /// trees. Finally, a top-level tree is built on these smaller trees to form the final BVH.
 /// This builder is inspired by
 /// "Rapid Bounding Volume Hierarchy Generation using Mini Trees", by P. Ganestam et al.
-template <typename Node, typename MortonCode = uint32_t>
+template <
+    typename Node,
+    typename SplitHeuristic = AreaHeuristic<typename Node::Scalar>,
+    typename MortonCode = uint32_t>
 class MiniTreeBuilder {
     using Scalar = typename Node::Scalar;
     using Vec  = bvh::v2::Vec<Scalar, Node::dimension>;
     using BBox = bvh::v2::BBox<Scalar, Node::dimension>;
 
 public:
-    struct Config : TopDownSahBuilder<Node>::Config {
+    struct Config : TopDownBuilder<Node, SplitHeuristic>::Config {
         /// Flag that turns on/off mini-tree pruning.
         bool enable_pruning = true;
 
@@ -131,7 +134,7 @@ private:
                 centers[i] = builder->centers_[prim_ids[i]];
             }
 
-            bvh = BinnedSahBuilder<Node>::build(bboxes, centers, builder->config_);
+            bvh = BinnedBuilder<Node, SplitHeuristic>::build(bboxes, centers, builder->config_);
 
             // Permute primitive indices so that they index the proper set of primitives
             for (size_t i = 0; i < bvh.prim_ids.size(); ++i)
@@ -159,7 +162,7 @@ private:
 
     std::vector<Bvh<Node>> build_mini_trees() {
         // Compute the bounding box of all centers
-        auto center_bbox = executor_.reduce(0, bboxes_.size(), BBox::make_empty(),
+        const BBox center_bbox = executor_.reduce(0, bboxes_.size(), BBox::make_empty(),
             [this] (BBox& bbox, size_t begin, size_t end) {
                 for (size_t i = begin; i < end; ++i)
                     bbox.extend(centers_[i]);
@@ -167,10 +170,10 @@ private:
             [] (BBox& bbox, const BBox& other) { bbox.extend(other); });
 
         assert(config_.log2_grid_dim <= std::numeric_limits<MortonCode>::digits / Node::dimension);
-        auto bin_count = size_t{1} << (config_.log2_grid_dim * Node::dimension);
-        auto grid_dim = size_t{1} << config_.log2_grid_dim;
-        auto grid_scale = Vec(static_cast<Scalar>(grid_dim)) * safe_inverse(center_bbox.get_diagonal());
-        auto grid_offset = -center_bbox.min * grid_scale;
+        const size_t bin_count = size_t{1} << (config_.log2_grid_dim * Node::dimension);
+        const size_t grid_dim = size_t{1} << config_.log2_grid_dim;
+        const auto grid_scale = Vec(static_cast<Scalar>(grid_dim)) * safe_inverse(center_bbox.get_diagonal());
+        const auto grid_offset = -center_bbox.min * grid_scale;
 
         // Place primitives in bins
         auto final_bins = executor_.reduce(0, bboxes_.size(), LocalBins {},
@@ -210,7 +213,7 @@ private:
         for (auto& mini_tree : mini_trees)
             avg_area += mini_tree.get_root().get_bbox().get_half_area();
         avg_area /= static_cast<Scalar>(mini_trees.size());
-        auto threshold = avg_area * config_.pruning_area_ratio;
+        const auto threshold = avg_area * config_.pruning_area_ratio;
 
         // Cull nodes whose area is above the threshold
         std::stack<size_t> stack;
@@ -255,9 +258,9 @@ private:
             centers[i] = bboxes[i].get_center();
         }
 
-        typename SweepSahBuilder<Node>::Config config = config_;
+        typename SweepBuilder<Node, SplitHeuristic>::Config config = config_;
         config.max_leaf_size = 1; // Needs to have only one mini-tree in each leaf
-        auto bvh = SweepSahBuilder<Node>::build(bboxes, centers, config);
+        auto bvh = SweepBuilder<Node, SplitHeuristic>::build(bboxes, centers, config);
 
         // Compute the offsets to apply to primitive and node indices
         std::vector<size_t> node_offsets(mini_trees.size());

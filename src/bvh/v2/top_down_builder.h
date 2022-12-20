@@ -4,7 +4,6 @@
 #include "bvh/v2/bvh.h"
 #include "bvh/v2/vec.h"
 #include "bvh/v2/bbox.h"
-#include "bvh/v2/split_heuristic.h"
 
 #include <stack>
 #include <span>
@@ -16,8 +15,8 @@
 namespace bvh::v2 {
 
 /// Base class for all SAH-based, top-down builders.
-template <typename Node>
-class TopDownSahBuilder {
+template <typename Node, typename SplitHeuristic>
+class TopDownBuilder {
 protected:
     using Scalar = typename Node::Scalar;
     using Vec  = bvh::v2::Vec<Scalar, Node::dimension>;
@@ -25,8 +24,8 @@ protected:
 
 public:
     struct Config {
-        /// SAH heuristic parameters that control how primitives are partitioned.
-        SplitHeuristic<Scalar> sah;
+        /// Heuristic that controls how nodes are split.
+        SplitHeuristic split_heuristic;
 
         /// Nodes containing less than this amount of primitives will not be split.
         /// This is mostly to speed up BVH construction, and using large values may lead to lower
@@ -52,7 +51,7 @@ protected:
     std::span<const Vec> centers_;
     const Config& config_;
 
-    BVH_ALWAYS_INLINE TopDownSahBuilder(
+    BVH_ALWAYS_INLINE TopDownBuilder(
         std::span<const BBox> bboxes,
         std::span<const Vec> centers,
         const Config& config)
@@ -67,7 +66,7 @@ protected:
     virtual std::optional<size_t> try_split(const BBox& bbox, size_t begin, size_t end) = 0;
 
     BVH_ALWAYS_INLINE const std::vector<size_t>& get_prim_ids() const {
-        return const_cast<TopDownSahBuilder*>(this)->get_prim_ids();
+        return const_cast<TopDownBuilder*>(this)->get_prim_ids();
     }
 
     Bvh<Node> build() {
