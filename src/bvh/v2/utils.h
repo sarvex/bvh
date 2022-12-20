@@ -41,14 +41,17 @@ BVH_ALWAYS_INLINE T robust_min(T a, T b) { return a < b ? a : b; }
 template <typename T, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 BVH_ALWAYS_INLINE T robust_max(T a, T b) { return a > b ? a : b; }
 
+template <typename T, typename U, std::enable_if_t<sizeof(T) == sizeof(U), bool> = true>
+BVH_ALWAYS_INLINE T bitcast(U u) {
+    T t;
+    std::memcpy(&t, &u, sizeof(T));
+    return t;
+}
+
 /// Adds the given number of ULPs (Units in the Last Place) to the given floating-point number.
 template <typename T, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 BVH_ALWAYS_INLINE T add_ulp_magnitude(T t, unsigned ulp) {
-    UnsignedIntType<sizeof(T) * CHAR_BIT> u;
-    std::memcpy(&u, &t, sizeof(T));
-    u += ulp;
-    std::memcpy(&t, &u, sizeof(T));
-    return t;
+    return bitcast<T>(bitcast<UnsignedIntType<sizeof(T) * CHAR_BIT>>(t) + ulp);
 }
 
 /// Computes the inverse of the given value, always returning a finite value.
